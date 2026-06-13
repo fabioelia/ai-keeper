@@ -34,6 +34,9 @@ let quitting = false;
 const suggestionCache = new Map(); // cache key -> suggestion payload
 const suggestionInFlight = new Map(); // cache key -> promise
 const notifiedKeys = new Set();
+// Sessions already waiting when the app starts shouldn't blast a stack of
+// notifications; only transitions that happen while we're running do.
+let seededExisting = false;
 
 function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -166,6 +169,8 @@ async function getSuggestion(sessionId) {
 
 function handleAttention(items) {
   const settings = store.get();
+  const firstScan = !seededExisting;
+  seededExisting = true;
   for (const item of items) {
     if (!item.needsAttention) continue;
     const key = `${item.sessionId}:${item.lastAssistantUuid || item.lastActivity}:${item.reason}`;
@@ -173,6 +178,10 @@ function handleAttention(items) {
     notifiedKeys.add(key);
     if (notifiedKeys.size > 500) notifiedKeys.delete(notifiedKeys.values().next().value);
 
+    if (firstScan) {
+      if (settings.autoSuggest) getSuggestion(item.sessionId).catch(() => {});
+      continue;
+    }
     if (settings.notifications && Notification.isSupported()) {
       const notification = new Notification({
         title: `${item.project}: ${item.title}`,
