@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://ntfy.sh/ai-keeper-4a7f90f8c86d4733bfd31ce9",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://ntfy.sh/ai-keeper-4a7f90f8c86d4733bfd31ce9",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://ntfy.sh/ai-keeper-4a7f90f8c86d4733bfd31ce9",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "allowedHttpHookUrls": [
+    "https://ntfy.sh/ai-keeper-4a7f90f8c86d4733bfd31ce9"
+  ]
+}
