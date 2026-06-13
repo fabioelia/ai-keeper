@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:;"
+    />
+    <title>AI Keeper</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header id="header">
+      <div class="brand">
+        <span class="logo-dot"></span>
+        <h1>AI Keeper</h1>
+        <span id="attention-badge" class="badge hidden">0</span>
+      </div>
+      <div class="header-right">
+        <span id="gemma-dot" class="status-dot" title="Gemma status unknown"></span>
+        <span id="hooks-dot" class="status-dot" title="Hook status unknown"></span>
+        <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+
+    <main id="sessions"></main>
+
+    <section id="settings-panel" class="hidden" aria-label="Settings">
+      <h2>Settings</h2>
+      <label>
+        Ollama URL
+        <input id="set-ollama" type="text" spellcheck="false" />
+      </label>
+      <label>
+        Gemma model
+        <input id="set-model" type="text" spellcheck="false" placeholder="gemma3:4b" />
+      </label>
+      <label>
+        Claude CLI path
+        <input id="set-claude" type="text" spellcheck="false" placeholder="claude" />
+      </label>
+      <label>
+        Hook server port
+        <input id="set-port" type="number" min="1024" max="65535" />
+      </label>
+      <label class="check">
+        <input id="set-autosuggest" type="checkbox" />
+        Auto-generate suggestions when a session needs attention
+      </label>
+      <label class="check">
+        <input id="set-notify" type="checkbox" />
+        Desktop notifications
+      </label>
+      <div class="settings-row">
+        <button id="save-settings" class="primary">Save</button>
+        <button id="close-settings">Close</button>
+      </div>
+      <div class="settings-block">
+        <h3>Claude Code hooks</h3>
+        <p class="hint">
+          Hooks give instant, exact "needs attention" signals. Without them AI Keeper falls back to
+          watching transcript files, which adds a short delay.
+        </p>
+        <div class="settings-row">
+          <button id="install-hooks">Install hooks</button>
+          <span id="hooks-state" class="hint"></span>
+        </div>
+      </div>
+      <div class="settings-block">
+        <h3>Gemma</h3>
+        <p id="gemma-state" class="hint">Checking…</p>
+      </div>
+    </section>
+
+    <div id="toast" class="hidden"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
