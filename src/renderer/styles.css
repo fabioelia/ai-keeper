@@ -182,6 +182,26 @@ body {
   max-width: 45%;
 }
 
+.chip.web {
+  background: #2b2440;
+  color: #c4b0ff;
+  font-weight: 600;
+}
+
+#demo-banner {
+  background: #3a2c12;
+  color: var(--attention);
+  font-size: 11.5px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+#demo-banner code {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
 .time {
   margin-left: auto;
   color: var(--muted);

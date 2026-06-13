@@ -24,6 +24,7 @@ class SessionMonitor extends EventEmitter {
     this.watcher = null;
     this.tickTimer = null;
     this.scanning = false;
+    this.stats = { projectsDir, dirExists: false, transcriptCount: 0, lastScanAt: null };
   }
 
   async start() {
@@ -83,11 +84,21 @@ class SessionMonitor extends EventEmitter {
     }
   }
 
+  getStats() {
+    return { ...this.stats };
+  }
+
   async rescan() {
     if (this.scanning) return;
     this.scanning = true;
     try {
-      const files = await listTranscripts(this.projectsDir);
+      const { files, dirExists } = await listTranscripts(this.projectsDir);
+      this.stats = {
+        projectsDir: this.projectsDir,
+        dirExists,
+        transcriptCount: files.length,
+        lastScanAt: Date.now(),
+      };
       const seen = new Set(files.map((f) => f.path));
       for (const known of this.sessions.keys()) {
         if (!seen.has(known)) this.sessions.delete(known);
@@ -166,7 +177,7 @@ async function listTranscripts(projectsDir) {
   try {
     projectDirs = await fs.promises.readdir(projectsDir, { withFileTypes: true });
   } catch {
-    return out;
+    return { files: out, dirExists: false };
   }
   for (const dir of projectDirs) {
     if (!dir.isDirectory()) continue;
@@ -188,7 +199,7 @@ async function listTranscripts(projectsDir) {
       }
     }
   }
-  return out;
+  return { files: out, dirExists: true };
 }
 
 module.exports = { SessionMonitor, toItem, sortItems };

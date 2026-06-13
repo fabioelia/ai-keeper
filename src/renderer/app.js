@@ -4,6 +4,7 @@ const api = window.aiKeeper;
 
 const state = {
   sessions: [],
+  stats: null, // { projectsDir, dirExists, transcriptCount, lastScanAt }
   suggestions: new Map(), // sessionId -> { key, summary, options, source }
   requested: new Set(), // suggestion keys already asked for
   drafts: new Map(), // sessionId -> reply draft
@@ -11,6 +12,7 @@ const state = {
   settings: null,
   gemma: null,
   hooks: null,
+  relay: null, // { configured, connected }
   lastSignature: '',
 };
 
@@ -205,6 +207,56 @@ function idleCard(item) {
   );
 }
 
+// Cards for Claude Code web sessions, fed by relay events. There is no local
+// transcript, so no Gemma suggestions or direct reply — the actions are
+// opening the web UI or teleporting the session into a local CLI.
+function remoteCard(item) {
+  const card = el('div', { class: `card ${item.needsAttention ? 'attention' : 'working'}` });
+  card.append(
+    el(
+      'div',
+      { class: 'card-top' },
+      el('span', { class: 'chip web', text: 'web' }),
+      el('span', { class: 'chip', text: item.project, title: item.cwd || '' }),
+      el('span', { class: 'time', text: timeAgo(item.lastActivity) }),
+    ),
+    el('div', { class: 'card-title', text: item.title }),
+  );
+  if (item.needsAttention) {
+    card.append(el('div', { class: 'card-status', text: item.statusMessage }));
+  } else {
+    card.append(
+      el('div', { class: 'card-status' }, el('span', { class: 'pulse' }), document.createTextNode(item.statusMessage)),
+    );
+  }
+  if (item.needsAttention) {
+    card.append(
+      el(
+        'div',
+        { class: 'reply-row' },
+        el('button', {
+          class: 'primary',
+          text: 'Open claude.ai/code',
+          onclick: () => api.openWeb(),
+        }),
+        el('button', {
+          class: 'ghost',
+          text: 'Copy teleport',
+          title: 'Copy "claude --teleport <session>" to continue this session in your terminal',
+          onclick: () =>
+            api
+              .writeClipboard(`claude --teleport ${item.sessionId}`)
+              .then(() => toast('Copied — run it in a terminal to pull the session local.')),
+        }),
+      ),
+    );
+  }
+  card.append(
+    el('div', { class: 'card-foot' }, el('span', { text: `web session ${String(item.sessionId).slice(0, 8)}` })),
+  );
+  return card;
+}
+
 function sendReply(item, text, mode) {
   const reply = (text || '').trim();
   if (!reply) {
@@ -232,9 +284,30 @@ function sendReply(item, text, mode) {
 function signature() {
   return JSON.stringify([
     state.sessions,
+    state.stats,
     [...state.suggestions.entries()],
     [...state.respond.entries()],
   ]);
+}
+
+function emptyState() {
+  const box = el('div', { class: 'empty' }, el('p', { text: 'No Claude Code sessions found.' }));
+  const stats = state.stats;
+  if (stats) {
+    if (!stats.dirExists) {
+      box.append(
+        el('p', {}, document.createTextNode('Watching '), el('code', { text: stats.projectsDir }), document.createTextNode(' — this folder doesn’t exist yet, which usually means Claude Code hasn’t run on this machine. Start a session in a terminal and it will appear here.')),
+      );
+    } else {
+      box.append(
+        el('p', {}, document.createTextNode('Watching '), el('code', { text: stats.projectsDir }), document.createTextNode(` — ${stats.transcriptCount} transcript(s) found.`)),
+      );
+    }
+  }
+  box.append(
+    el('p', {}, document.createTextNode('Sessions on claude.ai/code run in the cloud: configure a relay in settings (⚙) to see them. For sample data, run '), el('code', { text: 'npm run demo' }), document.createTextNode('.')),
+  );
+  return box;
 }
 
 function render(force = false) {
@@ -254,27 +327,24 @@ function render(force = false) {
   badge.classList.toggle('hidden', attention.length === 0);
 
   if (state.sessions.length === 0) {
-    root.append(
-      el(
-        'div',
-        { class: 'empty' },
-        el('p', { text: 'No Claude Code sessions found.' }),
-        el('p', {}, document.createTextNode('Start one in a terminal, or try the sample data with '), el('code', { text: 'npm run demo' }), document.createTextNode('.')),
-      ),
-    );
+    root.append(emptyState());
     return;
   }
 
   if (attention.length > 0) {
     root.append(el('div', { class: 'section-label', text: 'Needs your attention' }));
     for (const item of attention) {
-      requestSuggestion(item);
-      root.append(attentionCard(item));
+      if (item.remote) {
+        root.append(remoteCard(item));
+      } else {
+        requestSuggestion(item);
+        root.append(attentionCard(item));
+      }
     }
   }
   if (working.length > 0) {
     root.append(el('div', { class: 'section-label', text: 'Working' }));
-    for (const item of working) root.append(workingCard(item));
+    for (const item of working) root.append(item.remote ? remoteCard(item) : workingCard(item));
   }
   if (idle.length > 0) {
     root.append(el('div', { class: 'section-label', text: `Recent (${idle.length})` }));
@@ -293,6 +363,8 @@ function fillSettingsForm() {
   $('set-port').value = s.hookPort;
   $('set-autosuggest').checked = Boolean(s.autoSuggest);
   $('set-notify').checked = Boolean(s.notifications);
+  $('set-relay-url').value = s.relayUrl || '';
+  $('set-relay-token').value = s.relayToken || '';
 }
 
 async function saveSettings() {
@@ -303,11 +375,14 @@ async function saveSettings() {
     hookPort: Number($('set-port').value) || 43117,
     autoSuggest: $('set-autosuggest').checked,
     notifications: $('set-notify').checked,
+    relayUrl: $('set-relay-url').value.trim(),
+    relayToken: $('set-relay-token').value.trim(),
   };
   state.settings = await api.setSettings(patch);
   state.requested.clear();
   toast('Settings saved.');
   refreshGemmaStatus();
+  refreshRelayStatus();
 }
 
 function renderGemmaStatus() {
@@ -353,6 +428,39 @@ function renderHooksStatus() {
   }
 }
 
+function renderRelayStatus() {
+  const dot = $('relay-dot');
+  const label = $('relay-state');
+  const r = state.relay;
+  dot.className = 'status-dot';
+  if (!r || !r.configured) {
+    dot.classList.add('hidden');
+    label.textContent = r ? 'Not configured' : '';
+    return;
+  }
+  if (r.connected) {
+    dot.classList.add('ok');
+    dot.title = 'Relay connected — web session events flowing';
+    label.textContent = 'Connected ✓';
+  } else {
+    dot.classList.add('bad');
+    dot.title = 'Relay configured but not connected';
+    label.textContent = 'Configured, not connected (check URL / network)';
+  }
+}
+
+function renderWatchState() {
+  const label = $('watch-state');
+  const stats = state.stats;
+  if (!stats) {
+    label.textContent = 'Checking…';
+    return;
+  }
+  label.textContent = stats.dirExists
+    ? `Watching ${stats.projectsDir} — ${stats.transcriptCount} transcript(s).`
+    : `${stats.projectsDir} not found — Claude Code hasn't written any sessions on this machine yet.`;
+}
+
 async function refreshGemmaStatus() {
   state.gemma = await api.gemmaStatus();
   renderGemmaStatus();
@@ -363,16 +471,24 @@ async function refreshHooksStatus() {
   renderHooksStatus();
 }
 
+async function refreshRelayStatus() {
+  state.relay = await api.relayStatus();
+  renderRelayStatus();
+}
+
 /* ---------- init ---------- */
 
 async function init() {
   state.settings = await api.getSettings();
   fillSettingsForm();
+  if (state.settings.demo) $('demo-banner').classList.remove('hidden');
 
   $('settings-btn').addEventListener('click', () => {
     $('settings-panel').classList.toggle('hidden');
     fillSettingsForm();
     refreshHooksStatus();
+    refreshRelayStatus();
+    renderWatchState();
   });
   $('close-settings').addEventListener('click', () => $('settings-panel').classList.add('hidden'));
   $('save-settings').addEventListener('click', () => saveSettings().catch(() => toast('Could not save settings.')));
@@ -385,9 +501,20 @@ async function init() {
       toast('Hook install failed.');
     }
   });
+  $('copy-web-hooks').addEventListener('click', async () => {
+    const snippet = await api.relaySnippet();
+    if (!snippet) {
+      toast('Set and save a relay URL first.');
+      return;
+    }
+    await api.writeClipboard(snippet);
+    toast('Copied — merge into the repo’s .claude/settings.json.');
+  });
 
-  api.on('sessions:updated', (sessions) => {
+  api.on('sessions:updated', ({ sessions, stats }) => {
     state.sessions = sessions;
+    state.stats = stats;
+    renderWatchState();
     render();
   });
   api.on('suggestion:ready', (payload) => storeSuggestion(payload));
@@ -399,11 +526,19 @@ async function init() {
     state.gemma = status;
     renderGemmaStatus();
   });
+  api.on('relay:status', (status) => {
+    state.relay = status;
+    renderRelayStatus();
+  });
 
-  state.sessions = await api.getSessions();
+  const envelope = await api.getSessions();
+  state.sessions = envelope.sessions;
+  state.stats = envelope.stats;
   render(true);
+  renderWatchState();
   refreshGemmaStatus().catch(() => {});
   refreshHooksStatus().catch(() => {});
+  refreshRelayStatus().catch(() => {});
 
   // Keep "Xm ago" labels fresh.
   setInterval(() => {

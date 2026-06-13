@@ -23,6 +23,10 @@ const DEFAULT_SETTINGS = {
   claudePath: 'claude',
   autoSuggest: true,
   notifications: true,
+  // Relay for Claude Code web sessions (e.g. https://ntfy.sh/<random-topic>);
+  // empty string disables the subscription.
+  relayUrl: '',
+  relayToken: '',
 };
 
 module.exports = {

@@ -106,4 +106,26 @@ function statusOf({ settingsFile = SETTINGS_FILE } = {}) {
   };
 }
 
-module.exports = { install, uninstall, statusOf, hookCommand, HOOK_EVENTS, MARKER };
+// Settings snippet for repos used with Claude Code on the web. Web containers
+// cannot run command hooks, but HTTP hooks POST the same payload to a relay
+// the local panel subscribes to. Commit this into the repo's
+// .claude/settings.json and allow the relay domain in the web environment's
+// network settings.
+function webHookSnippet({ relayUrl, relayToken } = {}) {
+  const hook = {
+    type: 'http',
+    url: relayUrl,
+    timeout: 10,
+  };
+  if (relayToken) {
+    hook.headers = { Authorization: 'Bearer $AI_KEEPER_RELAY_TOKEN' };
+    hook.allowedEnvVars = ['AI_KEEPER_RELAY_TOKEN'];
+  }
+  const snippet = { hooks: {}, allowedHttpHookUrls: [relayUrl] };
+  for (const eventName of HOOK_EVENTS) {
+    snippet.hooks[eventName] = [{ matcher: '', hooks: [{ ...hook }] }];
+  }
+  return snippet;
+}
+
+module.exports = { install, uninstall, statusOf, hookCommand, webHookSnippet, HOOK_EVENTS, MARKER };

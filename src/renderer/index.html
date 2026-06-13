@@ -19,9 +19,15 @@
       <div class="header-right">
         <span id="gemma-dot" class="status-dot" title="Gemma status unknown"></span>
         <span id="hooks-dot" class="status-dot" title="Hook status unknown"></span>
+        <span id="relay-dot" class="status-dot hidden" title="Relay status unknown"></span>
         <button id="settings-btn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
       </div>
     </header>
+
+    <div id="demo-banner" class="hidden">
+      Demo data — these are sample sessions. Run <code>npm start</code> (without AI_KEEPER_DEMO) for
+      your real ones.
+    </div>
 
     <main id="sessions"></main>
 
@@ -69,6 +75,35 @@
       <div class="settings-block">
         <h3>Gemma</h3>
         <p id="gemma-state" class="hint">Checking…</p>
+      </div>
+      <div class="settings-block">
+        <h3>Claude Code web sessions</h3>
+        <p class="hint">
+          Web sessions run in cloud containers, so they can't be file-watched. Point their HTTP
+          hooks at a relay (an ntfy.sh topic works: https://ntfy.sh/&lt;long-random-topic&gt;) and
+          AI Keeper subscribes to it.
+        </p>
+        <label>
+          Relay URL
+          <input id="set-relay-url" type="text" spellcheck="false" placeholder="https://ntfy.sh/my-random-topic-7f3a91" />
+        </label>
+        <label>
+          Relay token (optional, sent as Bearer auth)
+          <input id="set-relay-token" type="text" spellcheck="false" />
+        </label>
+        <div class="settings-row">
+          <button id="copy-web-hooks">Copy web hook config</button>
+          <span id="relay-state" class="hint"></span>
+        </div>
+        <p class="hint">
+          Paste the copied JSON into the repo's <code>.claude/settings.json</code> (merge with
+          existing hooks), commit it, and allow the relay domain in the web environment's network
+          settings. Save settings here first so the snippet uses your relay URL.
+        </p>
+      </div>
+      <div class="settings-block">
+        <h3>Local discovery</h3>
+        <p id="watch-state" class="hint">Checking…</p>
       </div>
     </section>
 

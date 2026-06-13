@@ -134,6 +134,15 @@ class DemoMonitor extends EventEmitter {
   getSession(sessionId) {
     return this.sessions.find((s) => s.sessionId === sessionId) || null;
   }
+
+  getStats() {
+    return {
+      projectsDir: '(demo data — not reading real sessions)',
+      dirExists: true,
+      transcriptCount: this.sessions.length,
+      lastScanAt: Date.now(),
+    };
+  }
 }
 
 module.exports = { demoSessions, DemoMonitor };

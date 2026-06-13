@@ -14,13 +14,14 @@ const {
 } = require('electron');
 
 const { Store } = require('./store');
-const { SessionMonitor } = require('./sessionMonitor');
+const { SessionMonitor, sortItems } = require('./sessionMonitor');
 const { DemoMonitor } = require('./demo');
 const { HookServer } = require('./hookServer');
 const hookInstaller = require('./hookInstaller');
 const gemma = require('./gemma');
 const { sendToClaude } = require('./responder');
 const { trayIconPng } = require('./trayIcon');
+const { RelayClient, RemoteSessions } = require('./relay');
 
 const DEMO = process.env.AI_KEEPER_DEMO === '1';
 
@@ -29,7 +30,11 @@ let tray = null;
 let store = null;
 let monitor = null;
 let hookServer = null;
+let relay = null;
+let relayConnected = false;
 let quitting = false;
+
+const remoteSessions = new RemoteSessions();
 
 const suggestionCache = new Map(); // cache key -> suggestion payload
 const suggestionInFlight = new Map(); // cache key -> promise
@@ -167,6 +172,17 @@ async function getSuggestion(sessionId) {
   return promise;
 }
 
+function allItems() {
+  return sortItems([...monitor.list(), ...remoteSessions.items()]);
+}
+
+function pushSessions() {
+  const items = allItems();
+  send('sessions:updated', { sessions: items, stats: monitor.getStats() });
+  handleAttention(items);
+  updateTray(items);
+}
+
 function handleAttention(items) {
   const settings = store.get();
   const firstScan = !seededExisting;
@@ -179,7 +195,7 @@ function handleAttention(items) {
     if (notifiedKeys.size > 500) notifiedKeys.delete(notifiedKeys.values().next().value);
 
     if (firstScan) {
-      if (settings.autoSuggest) getSuggestion(item.sessionId).catch(() => {});
+      if (settings.autoSuggest && !item.remote) getSuggestion(item.sessionId).catch(() => {});
       continue;
     }
     if (settings.notifications && Notification.isSupported()) {
@@ -191,10 +207,32 @@ function handleAttention(items) {
       notification.on('click', () => showWindow());
       notification.show();
     }
-    if (settings.autoSuggest) {
+    if (settings.autoSuggest && !item.remote) {
       getSuggestion(item.sessionId).catch(() => {});
     }
   }
+}
+
+function startRelay() {
+  if (relay) relay.stop();
+  relay = null;
+  relayConnected = false;
+  const { relayUrl, relayToken } = store.get();
+  if (!relayUrl) {
+    send('relay:status', { configured: false, connected: false });
+    return;
+  }
+  relay = new RelayClient({ url: relayUrl, token: relayToken });
+  relay.on('event', (event) => {
+    remoteSessions.apply(event);
+    pushSessions();
+  });
+  relay.on('status', ({ connected }) => {
+    relayConnected = connected;
+    send('relay:status', { configured: true, connected });
+  });
+  relay.start();
+  send('relay:status', { configured: true, connected: false });
 }
 
 async function startHookServer() {
@@ -213,7 +251,7 @@ async function pushGemmaStatus() {
 }
 
 function registerIpc() {
-  ipcMain.handle('sessions:get', () => monitor.list());
+  ipcMain.handle('sessions:get', () => ({ sessions: allItems(), stats: monitor.getStats() }));
 
   ipcMain.handle('session:suggest', (_event, sessionId) => getSuggestion(sessionId));
 
@@ -221,6 +259,31 @@ function registerIpc() {
     const session = monitor.getSession(sessionId);
     if (session && session.cwd) shell.openPath(session.cwd);
     return true;
+  });
+
+  ipcMain.handle('web:open', () => {
+    shell.openExternal('https://claude.ai/code');
+    return true;
+  });
+
+  ipcMain.handle('clipboard:write', (_event, text) => {
+    clipboard.writeText(String(text || ''));
+    return true;
+  });
+
+  ipcMain.handle('relay:status', () => ({
+    configured: Boolean(store.get().relayUrl),
+    connected: relayConnected,
+  }));
+
+  ipcMain.handle('relay:snippet', () => {
+    const settings = store.get();
+    if (!settings.relayUrl) return null;
+    return JSON.stringify(
+      hookInstaller.webHookSnippet({ relayUrl: settings.relayUrl, relayToken: settings.relayToken }),
+      null,
+      2,
+    );
   });
 
   ipcMain.handle('session:respond', async (_event, { sessionId, text, mode }) => {
@@ -275,6 +338,9 @@ function registerIpc() {
       suggestionCache.clear();
       pushGemmaStatus().catch(() => {});
     }
+    if (after.relayUrl !== before.relayUrl || after.relayToken !== before.relayToken) {
+      startRelay();
+    }
     return { ...after, demo: DEMO };
   });
 
@@ -300,16 +366,13 @@ if (!gotLock) {
     store = new Store(app.getPath('userData'));
     monitor = DEMO ? new DemoMonitor() : new SessionMonitor();
 
-    monitor.on('update', (items) => {
-      send('sessions:updated', items);
-      handleAttention(items);
-      updateTray(items);
-    });
+    monitor.on('update', () => pushSessions());
 
     registerIpc();
     createTray(0);
     createWindow();
     await startHookServer();
+    startRelay();
     await monitor.start();
 
     pushGemmaStatus().catch(() => {});
@@ -323,6 +386,7 @@ if (!gotLock) {
     quitting = true;
     if (monitor) monitor.stop();
     if (hookServer) hookServer.stop();
+    if (relay) relay.stop();
   });
 
   app.on('window-all-closed', () => {

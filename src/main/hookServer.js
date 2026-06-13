@@ -77,6 +77,7 @@ function translate(body) {
   const base = {
     sessionId: payload.session_id,
     transcriptPath: payload.transcript_path || null,
+    cwd: payload.cwd || null,
     ts: Date.now(),
   };
 

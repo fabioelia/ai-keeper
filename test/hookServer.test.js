@@ -12,12 +12,14 @@ test('translate maps Notification permission messages', () => {
       hook_event_name: 'Notification',
       session_id: 's1',
       transcript_path: '/tmp/t.jsonl',
+      cwd: '/work/app',
       message: 'Claude needs your permission to use Bash',
     }),
   );
   assert.strictEqual(event.kind, 'permission');
   assert.strictEqual(event.sessionId, 's1');
   assert.strictEqual(event.transcriptPath, '/tmp/t.jsonl');
+  assert.strictEqual(event.cwd, '/work/app');
 });
 
 test('translate maps idle Notification to waiting and Stop to stop', () => {

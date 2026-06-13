@@ -74,3 +74,20 @@ test('statusOf reports uninstalled for missing file', () => {
   const status = installer.statusOf({ settingsFile: '/nonexistent/settings.json' });
   assert.strictEqual(status.installed, false);
 });
+
+test('webHookSnippet emits HTTP hooks for every event plus the URL allowlist', () => {
+  const snippet = installer.webHookSnippet({ relayUrl: 'https://ntfy.sh/my-topic' });
+  assert.deepStrictEqual(snippet.allowedHttpHookUrls, ['https://ntfy.sh/my-topic']);
+  for (const eventName of installer.HOOK_EVENTS) {
+    const hook = snippet.hooks[eventName][0].hooks[0];
+    assert.strictEqual(hook.type, 'http');
+    assert.strictEqual(hook.url, 'https://ntfy.sh/my-topic');
+    assert.strictEqual(hook.headers, undefined, 'no headers without a token');
+  }
+
+  const withToken = installer.webHookSnippet({ relayUrl: 'https://r.example/t', relayToken: 'secret' });
+  const hook = withToken.hooks.Stop[0].hooks[0];
+  assert.deepStrictEqual(hook.headers, { Authorization: 'Bearer $AI_KEEPER_RELAY_TOKEN' });
+  assert.deepStrictEqual(hook.allowedEnvVars, ['AI_KEEPER_RELAY_TOKEN']);
+  assert.ok(!JSON.stringify(withToken).includes('secret'), 'token value itself never appears in the snippet');
+});

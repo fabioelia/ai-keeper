@@ -25,8 +25,11 @@ through Ollama. Nothing leaves your computer.
 │  SessionMonitor ── watches ~/.claude/projects/**/*.jsonl transcripts       │
 │        │           (fs.watch + periodic rescan, no native deps)            │
 │        │                                                                   │
-│  HookServer ────── http://127.0.0.1:43117/event ◀── Claude Code hooks      │
-│        │           (Notification / Stop / UserPromptSubmit)                │
+│  HookServer ────── http://127.0.0.1:43117/event ◀── local Claude Code      │
+│        │           hooks (Notification / Stop / UserPromptSubmit)          │
+│        │                                                                   │
+│  RelayClient ───── subscribes to https://ntfy.sh/<topic> ◀── HTTP hooks    │
+│        │           firing inside claude.ai/code web containers             │
 │        ▼                                                                   │
 │  status.js ─────── working │ needs_input (reply / permission) │ idle       │
 │        │                                                                   │
@@ -88,6 +91,33 @@ npm run demo        # or: AI_KEEPER_DEMO=1 npm start
 This seeds three sample sessions (one waiting on a decision, one working, one blocked on a
 permission prompt). Suggestions still go through Gemma when Ollama is running.
 
+### Claude Code web sessions (claude.ai/code)
+
+Web sessions run in cloud containers, so their transcripts never touch your disk and command
+hooks can't run there. AI Keeper supports them through **HTTP hooks + a relay**:
+
+1. Pick a relay. The zero-infra option is an [ntfy.sh](https://ntfy.sh) topic with a long random
+   name, e.g. `https://ntfy.sh/ai-keeper-7f3a91c2b4`. Self-hosted ntfy (or any endpoint that
+   streams newline-delimited JSON) works too.
+2. In AI Keeper's settings, set **Relay URL** (and a token if your relay needs auth), save, and
+   click **Copy web hook config**.
+3. Merge the copied JSON into the repo's `.claude/settings.json` and commit it. It registers
+   `Notification`/`Stop`/`UserPromptSubmit` HTTP hooks pointing at your relay, plus the required
+   `allowedHttpHookUrls` allowlist.
+4. In the claude.ai/code environment settings, allow the relay domain in the network policy
+   (Custom allowlist, or Full access).
+
+Web sessions then show up as `web`-tagged cards the moment they need you. Because there is no
+local transcript, those cards don't get Gemma suggestions or a reply box; instead they offer
+**Open claude.ai/code** and **Copy teleport** (`claude --teleport <session-id>`), which pulls the
+session into your terminal — after which it becomes a regular local session with the full
+feature set.
+
+Privacy note: hook payloads (session ids, repo paths, notification text — not conversation
+content) transit the relay. Use a private/self-hosted relay or a long random topic, and a token
+if you want auth; the generated snippet references the token via `$AI_KEEPER_RELAY_TOKEN` rather
+than embedding it.
+
 ### Settings
 
 | Setting | Default | Meaning |
@@ -96,6 +126,8 @@ permission prompt). Suggestions still go through Gemma when Ollama is running.
 | Gemma model | `gemma3:4b` | Any Gemma tag pulled into Ollama |
 | Claude CLI path | `claude` | Binary used for `--resume` replies |
 | Hook server port | `43117` | Local port the Claude Code hooks POST to |
+| Relay URL | (empty) | ntfy-style stream for web session events; empty disables it |
+| Relay token | (empty) | Sent as `Authorization: Bearer …` when subscribing |
 | Auto-suggest | on | Generate suggestions as soon as a session needs attention |
 | Desktop notifications | on | OS notification when a session starts waiting on you |
 
@@ -120,6 +152,19 @@ makes the logic unit-testable.
 | `src/main/gemma.js` | Ollama client, prompt, JSON parsing, fallbacks |
 | `src/main/responder.js` | `claude --resume` headless replies |
 | `src/renderer/` | The panel UI (vanilla DOM, no framework) |
+
+## Troubleshooting
+
+**The panel is empty (or only demo data shows).** The demo banner at the top means you launched
+with `npm run demo` — use `npm start` for real sessions. In real mode, the empty state and the
+settings panel show exactly what is being watched, e.g.
+`Watching /Users/you/.claude/projects — 0 transcripts`. If the directory doesn't exist, Claude
+Code hasn't run on this machine yet: local terminal/IDE sessions appear automatically once you
+start one, while claude.ai/code sessions live in the cloud and need the relay setup above. A
+non-standard config location can be pointed at with the `CLAUDE_CONFIG_DIR` environment variable.
+
+**No suggestions / "fallback" tag on summaries.** Ollama isn't reachable or the model isn't
+pulled — the settings panel shows which, and `ollama pull gemma3:4b` fixes the latter.
 
 ## Known limitations
 

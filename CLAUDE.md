@@ -17,6 +17,8 @@ Electron notification panel for Claude Code sessions with local Gemma (Ollama) s
 - Renderer is vanilla DOM built through the `el()` helper in `src/renderer/app.js`; always set text
   via `textContent`/`text:` (never innerHTML) — transcript content is untrusted.
 - Session state flow: transcripts (`transcript.js`) + hook events (`hookServer.js`) →
-  `status.js#computeStatus` → `sessionMonitor.js#toItem` → IPC push `sessions:updated`.
+  `status.js#computeStatus` → `sessionMonitor.js#toItem` → IPC push `sessions:updated`
+  (envelope `{ sessions, stats }`). Remote web sessions arrive via `relay.js` (ntfy-style
+  stream of HTTP-hook payloads) and merge into the same list as `remote: true` items.
 - Hook entries written into `~/.claude/settings.json` carry the `# ai-keeper` marker; the
   installer/uninstaller must only ever touch entries with that marker.
