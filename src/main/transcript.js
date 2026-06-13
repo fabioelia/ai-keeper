@@ -133,9 +133,10 @@ function reduceEntries(entries, filePath) {
     }
   }
 
+  const cleanedFirstUser = firstUserText ? stripMarkup(firstUserText) : null;
   session.title =
     lastSummary ||
-    (firstUserText ? truncate(firstUserText, 80) : null) ||
+    (cleanedFirstUser ? truncate(cleanedFirstUser, 80) : null) ||
     (session.cwd ? path.basename(session.cwd) : null) ||
     'Claude Code session';
 
@@ -151,6 +152,20 @@ function reduceEntries(entries, filePath) {
 function truncate(text, max) {
   const clean = text.replace(/\s+/g, ' ').trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+// First user messages sometimes carry injected wrappers (<command-name>,
+// <task-notification>, system reminders); drop tag-like spans so titles stay
+// readable. Returns null when nothing readable remains.
+function stripMarkup(text) {
+  const stripped = text
+    // tag pairs wrapping a single bare token (ids, slugs) go entirely…
+    .replace(/<(\w[\w.-]*)>\s*[^<>\s]*\s*<\/\1>/g, ' ')
+    // …other tags are dropped but their prose content is kept
+    .replace(/<[^<>]{1,60}>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped || null;
 }
 
 async function parseFile(filePath) {
@@ -170,4 +185,4 @@ async function parseFile(filePath) {
   return session;
 }
 
-module.exports = { parseFile, parseLines, reduceEntries, textFromContent, truncate };
+module.exports = { parseFile, parseLines, reduceEntries, textFromContent, truncate, stripMarkup };

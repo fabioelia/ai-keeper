@@ -172,6 +172,32 @@ test('truncate collapses whitespace and bounds length', () => {
   assert.strictEqual(truncate('x'.repeat(20), 10).length, 10);
 });
 
+test('titles strip injected tag wrappers from first user messages', () => {
+  const raw = line({
+    type: 'user',
+    sessionId: 's5',
+    uuid: 'u1',
+    timestamp: T0,
+    message: {
+      role: 'user',
+      content: '<task-notification> <task-id>bo7</task-id> Monitor event: push retry loop </task-notification>',
+    },
+  });
+  const session = reduceEntries(parseLines(raw), null);
+  assert.strictEqual(session.title, 'Monitor event: push retry loop');
+
+  const onlyTags = line({
+    type: 'user',
+    sessionId: 's6',
+    cwd: '/work/app',
+    uuid: 'u1',
+    timestamp: T0,
+    message: { role: 'user', content: '<command-name></command-name>' },
+  });
+  const fallback = reduceEntries(parseLines(onlyTags), null);
+  assert.strictEqual(fallback.title, 'app'); // falls through to cwd basename
+});
+
 test('parseFile reads a transcript from disk and fills session id from filename', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-keeper-test-'));
   const file = path.join(dir, 'abc-123.jsonl');
