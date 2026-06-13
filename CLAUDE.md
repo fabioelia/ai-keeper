@@ -22,3 +22,7 @@ Electron notification panel for Claude Code sessions with local Gemma (Ollama) s
   stream of HTTP-hook payloads) and merge into the same list as `remote: true` items.
 - Hook entries written into `~/.claude/settings.json` carry the `# ai-keeper` marker; the
   installer/uninstaller must only ever touch entries with that marker.
+- `policy.js` is the deterministic risk classifier (safe/caution/danger) for pending tool
+  requests — the safety spine for any future automation. Hard rule: a model may only make a
+  decision *more* cautious, never less; `danger` is a floor that user rules can't soften. Today
+  it only feeds a read-only triage badge; it must stay Electron-free and exhaustively tested.

@@ -81,6 +81,20 @@ function storeSuggestion(payload) {
   render();
 }
 
+const RISK_LABEL = {
+  safe: '✓ Safe — read-only',
+  caution: '⚠ Review — has side effects',
+  danger: '⛔ Destructive — read carefully',
+};
+
+// Triage chip showing the deterministic risk class of the pending tool request.
+// Purely informational: AI Keeper never auto-approves on its own here.
+function riskBadge(item) {
+  const badge = el('div', { class: `risk-badge ${item.risk}` }, el('span', { text: RISK_LABEL[item.risk] || item.risk }));
+  if (item.riskReason) badge.append(el('span', { class: 'risk-reason', text: item.riskReason }));
+  return badge;
+}
+
 function attentionCard(item) {
   const suggestion = suggestionFor(item);
   const respond = state.respond.get(item.sessionId);
@@ -97,6 +111,10 @@ function attentionCard(item) {
     el('div', { class: 'card-title', text: item.title }),
     el('div', { class: 'card-status', text: item.statusMessage }),
   );
+
+  if (item.reason === 'permission' && item.risk) {
+    card.append(riskBadge(item));
+  }
 
   if (suggestion) {
     const reply = el('div', { class: 'agent-reply', text: suggestion.summary });

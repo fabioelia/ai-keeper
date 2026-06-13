@@ -6,6 +6,7 @@ const { EventEmitter } = require('events');
 const { PROJECTS_DIR, TICK_MS, STALE_AFTER_MS } = require('./constants');
 const transcript = require('./transcript');
 const { computeStatus } = require('./status');
+const { classifyTool } = require('./policy');
 
 const MAX_IDLE_LISTED = 20;
 
@@ -141,8 +142,12 @@ class SessionMonitor extends EventEmitter {
 }
 
 // The wire shape the renderer consumes for one session.
-function toItem(session, hookState, now = Date.now()) {
+function toItem(session, hookState, now = Date.now(), rules = {}) {
   const st = computeStatus(session, hookState, now);
+  // Triage hint only: classify the pending permission request so the panel can
+  // flag which waiting sessions are safe reads vs. destructive actions. This
+  // never approves anything — it just ranks attention.
+  const risk = session.pendingToolUse ? classifyTool(session.pendingToolUse, rules) : null;
   return {
     sessionId: session.sessionId,
     filePath: session.filePath,
@@ -157,6 +162,8 @@ function toItem(session, hookState, now = Date.now()) {
     lastAssistantText: session.lastAssistant ? transcript.truncate(session.lastAssistant.text, 280) : null,
     lastAssistantUuid: session.lastAssistant ? session.lastAssistant.uuid : null,
     pendingToolUse: session.pendingToolUse,
+    risk: risk ? risk.risk : null,
+    riskReason: risk ? risk.reason : null,
   };
 }
 
